@@ -1,4 +1,4 @@
-# Kubernetes Cluster Upgrade — Layman's Guide
+# Kubernetes Cluster Upgrade — Easy's Everyday Guide
 ## Upgrading from v1.28 to v1.29 using kubeadm
 
 This document explains the upgrade process in plain English — what each step does, why it exists, and what breaks if you skip it. Based on a real upgrade performed on this cluster.
