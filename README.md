@@ -296,7 +296,7 @@ sudo systemctl restart containerd
 
 - [Networking Deep Dive](docs/networking-explained.md) — three IP spaces, iptables internals, SIP/F5 context
 - [GitHub Setup from GCP](docs/github-setup.md) — push from GCP VM to GitHub
-
+- [Cluster Upgrade Guide](docs/cluster-upgrade-explained.md) — v1.28 to v1.29, every step explained with a Mental Model referecne
 ---
 
 ## 🗺️ Roadmap
@@ -310,7 +310,7 @@ sudo systemctl restart containerd
 - [ ] Helm chart deployment
 - [ ] NetworkPolicy implementation
 - [ ] HPA with Metrics Server
-- [ ] Cluster upgrade v1.28 to v1.29
+- [x] Cluster upgrade v1.28 to v1.29
 - [ ] Terraform — provision GCP infra as code
 
 ---
@@ -318,7 +318,7 @@ sudo systemctl restart containerd
 ## 👤 Author
 
 **Sourav Nandy** — Platform & DevOps Engineer | CKA Certified
-Ericsson / Verizon | OpenShift Production SME | 8+ Years
+Ericsson / Verizon | OpenShift Production SME | 9+ Years
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-sourav--nandy--0115-0A66C2?style=flat&logo=linkedin)](https://linkedin.com/in/sourav-nandy-0115)
 [![GitHub](https://img.shields.io/badge/GitHub-sourav--ndx-181717?style=flat&logo=github)](https://github.com/sourav-ndx)
