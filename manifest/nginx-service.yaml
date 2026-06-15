@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx
+  namespace: default
+  labels:
+    app: nginx
+spec:
+  type: NodePort
+  # Selector must match pod labels exactly
+  # If this doesn't match — endpoints will be empty — 503 errors
+  selector:
+    app: nginx
+  ports:
+  - protocol: TCP
+    port: 80          # Service port (ClusterIP access)
+    targetPort: 80    # Container port
+    # nodePort not specified — K8s assigns from range 30000-32767
+    # To fix nodePort: uncomment and set
+    # nodePort: 30080
+
