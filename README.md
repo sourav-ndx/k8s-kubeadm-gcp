@@ -1,7 +1,9 @@
 <div align="center">
 
-# 🚀 Kubernetes Cluster Setup from Scratch
+# 🚀 Kubernetes Cluster from Scratch
 ### Built with kubeadm on Google Cloud Platform
+
+> 2-node cluster | Kubernetes v1.28 | Calico CNI | GCP e2-medium | Built from scratch
 
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-v1.28-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
 ![Calico](https://img.shields.io/badge/CNI-Calico_v3.26-F8861A?style=for-the-badge)
@@ -9,12 +11,54 @@
 ![containerd](https://img.shields.io/badge/Runtime-containerd-575757?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Cluster-Active-brightgreen?style=for-the-badge)
 
-<br/>
-
-> **No EKS. No GKE. No managed anything.**
-> Raw kubeadm on Ubuntu VMs — full control plane access, etcd visible, every component understood.
-
 </div>
+
+---
+
+## 📁 Repository Structure
+
+```
+k8s-kubeadm-gcp/
+├── setup/
+│   ├── 01-prerequisites.sh     # Swap, kernel modules, sysctl — both nodes
+│   ├── 02-containerd.sh        # Container runtime install and config — both nodes
+│   ├── 03-k8s-install.sh       # kubeadm, kubelet, kubectl — both nodes
+│   ├── 04-control-plane.sh     # kubeadm init — control plane only
+│   ├── 05-calico.sh            # Calico CNI install — control plane only
+│   └── 06-verify.sh            # Cluster health check and test deployment
+├── manifests/
+│   ├── nginx-deployment.yaml   # nginx — 2 replicas with probes and resource limits
+│   ├── nginx-service.yaml      # NodePort Service for nginx
+│   ├── webapp-deployment.yaml  # Apache httpd — 3 replicas
+│   └── webapp-service.yaml     # NodePort Service for webapp
+├── docs/
+│   ├── networking-explained.md # Three IP spaces, iptables internals, SIP context
+│   └── github-setup.md         # Push from GCP VM to GitHub
+└── README.md
+```
+
+---
+
+## ⚡ Quick Start
+
+```bash
+git clone git@github.com:sourav-ndx/k8s-kubeadm-gcp.git
+cd k8s-kubeadm-gcp
+chmod +x setup/*.sh
+
+# Run on BOTH nodes (control plane + worker):
+bash setup/01-prerequisites.sh
+bash setup/02-containerd.sh
+bash setup/03-k8s-install.sh
+
+# Run on CONTROL PLANE only:
+bash setup/04-control-plane.sh
+bash setup/05-calico.sh
+
+# Join worker node using the command printed by 04-control-plane.sh
+# Then verify from control plane:
+bash setup/06-verify.sh
+```
 
 ---
 
@@ -54,8 +98,7 @@
 | **Pod Network** | `192.168.0.0/16` | Calico CNI | Pod-to-pod communication |
 | **Service Network** | `10.96.0.0/12` | kube-proxy / iptables | Virtual Service IPs |
 
-> **Key Insight:** Service IPs (ClusterIP) are **not real interfaces**. kube-proxy programs iptables rules that intercept traffic to these IPs and redirect to actual pod IPs — pure Linux kernel networking, zero proxy overhead.
-
+> **Key Insight:** Service IPs (ClusterIP) are **not real interfaces**. No NIC holds them anywhere. kube-proxy programs iptables rules that intercept traffic to these IPs and redirect to actual pod IPs — pure Linux kernel networking, zero proxy overhead.
 
 ---
 
@@ -82,7 +125,7 @@ sudo swapoff -a
 sudo sed -i '/swap/d' /etc/fstab
 free -h
 ```
-> kubelet refuses to start if swap is enabled. K8s scheduler assumes RAM is the only memory tier.
+> kubelet refuses to start if swap is enabled. K8s scheduler assumes RAM is the only memory tier — swap breaks this contract.
 
 ### 2. Kernel Modules
 ```bash
@@ -117,7 +160,7 @@ containerd config default | sudo tee /etc/containerd/config.toml
 sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 sudo systemctl restart containerd && sudo systemctl enable containerd
 ```
-> **`SystemdCgroup = true` is critical.** K8s and containerd must share the same cgroup driver. Mismatch = kubelet crash. Most common kubeadm failure.
+> **`SystemdCgroup = true` is critical.** K8s and containerd must share the same cgroup driver. Mismatch causes kubelet to crash — most common kubeadm failure point.
 
 ### Step 2 — kubeadm + kubelet + kubectl (Both Nodes)
 ```bash
@@ -142,7 +185,6 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 # Regenerate join command anytime:
 kubeadm token create --print-join-command
 ```
-> `--pod-network-cidr=192.168.0.0/16` matches Calico default. Must not overlap node or service networks.
 
 ### Step 4 — Calico CNI (Control Plane Only)
 ```bash
@@ -175,15 +217,17 @@ k8s-worker1   Ready    worker           6m   v1.28.15
 
 ```bash
 # Deploy nginx — 2 replicas
-kubectl create deployment nginx --image=nginx --replicas=2
-kubectl expose deployment nginx --type=NodePort --port=80
-kubectl get pods -o wide
-kubectl get svc nginx
-curl http://<WORKER_NODE_IP>:<NODEPORT>
+kubectl apply -f manifests/nginx-deployment.yaml
+kubectl apply -f manifests/nginx-service.yaml
 
-# Deploy Apache — 3 replicas
-kubectl create deployment webapp --image=httpd:latest --replicas=3
-kubectl expose deployment webapp --type=NodePort --port=80 --name=webapp-svc
+# Deploy Apache webapp — 3 replicas
+kubectl apply -f manifests/webapp-deployment.yaml
+kubectl apply -f manifests/webapp-service.yaml
+
+# Verify
+kubectl get pods -o wide
+kubectl get svc
+curl http://<WORKER_NODE_IP>:<NODEPORT>
 ```
 
 ---
@@ -195,7 +239,7 @@ sudo iptables -t nat -L KUBE-SERVICES
 sudo iptables -t nat -L KUBE-SVC-<CHAIN_NAME>
 ```
 
-**Output:**
+**Actual output from this cluster:**
 ```
 KUBE-SEP-xxx  probability 0.33333333349  ->  192.168.194.67:80
 KUBE-SEP-xxx  probability 0.50000000000  ->  192.168.194.68:80
@@ -204,7 +248,7 @@ KUBE-SEP-xxx  (remaining)               ->  192.168.194.69:80
 
 **The math:** 33.3% + (50% of 66.7%) + (100% of 33.3%) = **33.3% per pod**
 
-> K8s load balancing is stateless probability-based iptables — not round-robin. Each packet independently evaluates rules. This is why stateful protocols like SIP need F5 with source IP persistence instead.
+> K8s load balancing is stateless probability-based iptables — not round-robin. Each packet independently evaluates rules. This is why stateful protocols like SIP need F5 with source IP persistence — Kubernetes Services would break mid-call sessions by routing packets to different pods.
 
 ---
 
@@ -212,7 +256,7 @@ KUBE-SEP-xxx  (remaining)               ->  192.168.194.69:80
 
 | Pod | Role | Impact if Down |
 |:---|:---|:---|
-| **etcd** | Cluster state database | Catastrophic — cluster loses all state |
+| **etcd** | Cluster state database | Catastrophic — all state lost |
 | **kube-apiserver** | Front door for all operations | No cluster operations possible |
 | **kube-scheduler** | Assigns pods to nodes | New pods stay Pending |
 | **controller-manager** | Reconciliation — recreates crashed pods | Pod failures not recovered |
@@ -234,12 +278,34 @@ KUBE-SEP-xxx  (remaining)               ->  192.168.194.69:80
 
 ---
 
+## 🔄 Cluster Lifecycle
+
+```bash
+# Restart cluster after VM reboot (both nodes):
+sudo systemctl restart kubelet
+
+# Reset a node cleanly:
+sudo kubeadm reset -f
+sudo rm -rf /etc/kubernetes /var/lib/kubelet /var/lib/etcd ~/.kube
+sudo systemctl restart containerd
+```
+
+---
+
+## 📖 Further Reading
+
+- [Networking Deep Dive](docs/networking-explained.md) — three IP spaces, iptables internals, SIP/F5 context
+- [GitHub Setup from GCP](docs/github-setup.md) — push from GCP VM to GitHub
+
+---
+
 ## 🗺️ Roadmap
 
 - [x] 2-node kubeadm cluster on GCP
 - [x] Calico CNI — pod networking live
 - [x] NodePort Services — external access verified
 - [x] kube-proxy iptables inspection
+- [x] Setup scripts and manifests
 - [ ] ArgoCD — GitOps deployment pipeline
 - [ ] Helm chart deployment
 - [ ] NetworkPolicy implementation
